@@ -540,7 +540,6 @@ function renderDoubanCards(data, container) {
                 <div class="relative w-full aspect-[2/3] overflow-hidden cursor-pointer" onclick="fillAndSearchWithDouban('${safeTitle}')">
                     <img src="${originalCoverUrl}" alt="${safeTitle}" 
                         class="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
-                        onerror="this.onerror=null; this.src='${proxiedCoverUrl}'; this.classList.add('object-contain');"
                         loading="lazy" referrerpolicy="no-referrer">
                     <div class="absolute inset-0 bg-gradient-to-t from-black to-transparent opacity-60"></div>
                     <div class="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-sm">
@@ -560,6 +559,16 @@ function renderDoubanCards(data, container) {
                     </button>
                 </div>
             `;
+
+            const coverImage = card.querySelector('img');
+            coverImage.addEventListener('error', async () => {
+                try {
+                    coverImage.src = await window.ProxyAuth.addAuthToProxyUrl(proxiedCoverUrl);
+                    coverImage.classList.add('object-contain');
+                } catch (error) {
+                    console.error('封面代理请求失败：', error);
+                }
+            }, { once: true });
             
             fragment.appendChild(card);
         });
