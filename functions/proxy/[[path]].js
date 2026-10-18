@@ -269,10 +269,12 @@ export async function onRequest(context) {
                  throw new Error(`HTTP error ${response.status}: ${response.statusText}. URL: ${targetUrl}. Body: ${errorBody.substring(0, 150)}`);
             }
 
-            // 读取响应内容为文本
-            const content = await response.text();
             const contentType = response.headers.get('Content-Type') || '';
-            logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.length}`);
+            // 图片、视频片段等必须保留原始字节，不能经过 UTF-8 文本解码。
+            const isBinary = !isM3u8Content('', contentType) &&
+                (isMediaFile(targetUrl, contentType) || contentType.toLowerCase().startsWith('application/octet-stream'));
+            const content = isBinary ? await response.arrayBuffer() : await response.text();
+            logDebug(`请求成功: ${targetUrl}, Content-Type: ${contentType}, 内容长度: ${content.byteLength ?? content.length}`);
             return { content, contentType, responseHeaders: response.headers }; // 同时返回原始响应头
 
         } catch (error) {
@@ -542,7 +544,7 @@ export async function onRequest(context) {
         const { content, contentType, responseHeaders } = await fetchContentWithType(targetUrl);
 
         // --- 写入缓存 (KV) ---
-        if (kvNamespace) {
+        if (kvNamespace && typeof content === 'string') {
              try {
                  const headersToCache = {};
                  responseHeaders.forEach((value, key) => { headersToCache[key.toLowerCase()] = value; });
@@ -564,6 +566,8 @@ export async function onRequest(context) {
         } else {
             logDebug(`内容不是 M3U8 (类型: ${contentType})，直接返回: ${targetUrl}`);
             const finalHeaders = new Headers(responseHeaders);
+            finalHeaders.delete('Content-Encoding');
+            finalHeaders.delete('Content-Length');
             finalHeaders.set('Cache-Control', `public, max-age=${CACHE_TTL}`);
             // 添加 CORS 头，确保非 M3U8 内容也能跨域访问（例如图片、字幕文件等）
             finalHeaders.set("Access-Control-Allow-Origin", "*");
